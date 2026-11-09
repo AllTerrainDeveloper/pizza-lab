@@ -1,0 +1,37 @@
+[
+	{
+		"file": "fire.mp3",
+		"title": "Campfire sound ambience",
+		"author": "Glaneur de sons",
+		"license": "CC BY 3.0",
+		"source": "https://commons.wikimedia.org/wiki/File:Campfire_sound_ambience.ogg"
+	},
+	{
+		"file": "sizzle.mp3",
+		"title": "Frying fries: going in and out of oil",
+		"author": "ezwa",
+		"license": "Public domain",
+		"source": "https://commons.wikimedia.org/wiki/File:Frying_fries_going_in_and_out_of_oil.ogg"
+	},
+	{
+		"file": "cut.mp3",
+		"title": "chopping leeks",
+		"author": "hugh",
+		"license": "Public domain",
+		"source": "https://commons.wikimedia.org/wiki/File:Chopping_leeks.ogg"
+	},
+	{
+		"file": "ding.mp3",
+		"title": "Typewriter ding",
+		"author": "_stubb",
+		"license": "CC0 1.0",
+		"source": "https://commons.wikimedia.org/wiki/File:406243_stubb_typewriter-ding-near-mono.wav"
+	},
+	{
+		"file": "plop.mp3",
+		"title": "Impact Sounds: impactSoft_medium_003",
+		"author": "Kenney (www.kenney.nl)",
+		"license": "CC0 1.0",
+		"source": "https://kenney.nl/assets/impact-sounds"
+	}
+]

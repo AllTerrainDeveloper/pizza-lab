@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pizza Lab · 3D pizza & size calculator</title>
+<meta name="description" content="A real-time 3D pizza you can slice, bake in a wood-fired oven, and a calculator that settles it: one big pizza or two medium ones?">
+<meta name="theme-color" content="#140d09">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23d9893a'/%3E%3Ccircle cx='32' cy='32' r='24' fill='%23f6d58a'/%3E%3Ccircle cx='24' cy='24' r='5' fill='%23b2321f'/%3E%3Ccircle cx='40' cy='28' r='5' fill='%23b2321f'/%3E%3Ccircle cx='30' cy='42' r='5' fill='%23b2321f'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,500;1,9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+	:root {
+		--bg: #140d09;
+		--panel: rgba(28, 19, 14, 0.74);
+		--panel-2: rgba(255, 236, 214, 0.06);
+		--line: rgba(255, 228, 196, 0.13);
+		--text: #f7ede1;
+		--muted: #c6b2a0;
+		--tomato: #ff5a36;
+		--tomato-2: #d63b1d;
+		--basil: #6cc36f;
+		--cheese: #ffd36e;
+		--crust: #e3a15a;
+		--radius: 16px;
+		--shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+	}
+	* { box-sizing: border-box; }
+	html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; overflow: hidden; -webkit-font-smoothing: antialiased; }
+	#stage, #stage canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+	.labels { position: fixed !important; inset: 0; pointer-events: none; }
+	button, input, select { font: inherit; color: inherit; }
+	button { cursor: pointer; }
+
+	/* loader */
+	#loader { position: fixed; inset: 0; z-index: 50; display: grid; place-content: center; justify-items: center; gap: 22px; background: radial-gradient(circle at 50% 45%, #3a2014, var(--bg) 65%); transition: opacity .8s ease, visibility .8s; }
+	#loader.gone { opacity: 0; visibility: hidden; }
+	.spin { width: 104px; height: 104px; overflow: visible; filter: drop-shadow(0 6px 26px rgba(255, 140, 50, .28)); }
+	.spin g { transform-box: view-box; transform-origin: 50px 50px; animation: slice 1.2s ease-in-out infinite; opacity: .28; }
+	.spin .cr { fill: #d18a43; }
+	.spin .ch { fill: #f6c86a; }
+	.spin .pp { fill: #c23a1f; }
+	@keyframes slice { 0%, 60%, 100% { opacity: .28; transform: scale(.94); } 18% { opacity: 1; transform: scale(1.02); } }
+	@keyframes spin { to { transform: rotate(360deg); } }
+	#loader h1 { margin: 0; font: italic 700 40px/1 Fraunces, serif; letter-spacing: -.02em; }
+	#loader p { margin: 0; color: var(--muted); min-height: 1.4em; }
+	#fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 40; }
+
+	/* top bar */
+	header { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 14px 18px; padding-top: max(14px, env(safe-area-inset-top)); pointer-events: none; }
+	header > * { pointer-events: auto; }
+	.brand { display: flex; align-items: baseline; gap: 10px; font: italic 700 26px/1 Fraunces, serif; letter-spacing: -.02em; text-shadow: 0 2px 20px rgba(0,0,0,.6); }
+	.brand small { font: 500 12px/1 Inter, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--cheese); font-style: normal; }
+	.brand em { color: var(--tomato); }
+	#mute { margin-left: auto; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(14px); display: grid; place-items: center; }
+	#mute svg { width: 18px; height: 18px; }
+	#mute .x { display: none; }
+	#mute.off .x { display: block; }
+	#mute.off .w { display: none; }
+
+	/* panels */
+	/* one dock: Make it → Recipe → Size & price, all about the same pizza; the 3D table fills the rest */
+	.panel { position: fixed; z-index: 10; top: 74px; left: 18px; width: 392px; max-height: calc(100% - 92px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(18px) saturate(1.2); box-shadow: var(--shadow); transition: opacity .4s, transform .4s; }
+	.dtabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 6px; margin: 0; border-bottom: 1px solid var(--line); }
+	.dtabs button { border: 0; background: transparent; padding: 9px 6px; border-radius: 11px; color: var(--muted); font-weight: 650; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 7px; transition: background .2s, color .2s; }
+	.dtabs button .n { width: 19px; height: 19px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; background: rgba(255,236,214,.1); color: var(--muted); }
+	.dtabs button:hover { color: var(--text); }
+	.dtabs button.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+	.dtabs button.on .n { background: var(--tomato); color: #fff; }
+	.only-phone { display: none !important; }
+	.panes { overflow: auto; scrollbar-width: thin; padding: 16px 18px 18px; }
+	.pane { display: none; }
+	body[data-panel="build"] #build, body[data-panel="recipe"] #recipe, body[data-panel="calc"] #calc { display: block; animation: paneIn .35s ease; }
+	@keyframes paneIn { from { opacity: 0; transform: translateY(6px); } }
+	body:not(.ready) .panel { opacity: 0; transform: translateY(10px); }
+	/* wide screens: the calculator is usable over the loading screen, before the 3D is ready */
+	@media (min-width: 1151px) { body.calc-early:not(.ready) .panel { z-index: 60; opacity: 1; transform: none; } }
+	body.baking .panel { opacity: 0; pointer-events: none; transform: translateY(10px); }
+	.panel h2 { margin: 0 0 4px; font: italic 600 22px/1.15 Fraunces, serif; letter-spacing: -.01em; }
+	.sub { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+	.field { margin: 14px 0 6px; display: flex; justify-content: space-between; align-items: baseline; font-weight: 600; font-size: 13px; }
+	.field output { color: var(--cheese); font-variant-numeric: tabular-nums; font-weight: 600; }
+	.chips { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+	.chips button { border: 1px solid var(--line); background: var(--panel-2); padding: 9px 10px; border-radius: 11px; font-weight: 600; text-align: left; display: flex; align-items: center; gap: 8px; transition: background .2s, border-color .2s; }
+	.chips button i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+	.chips button.on { background: rgba(255, 90, 54, .16); border-color: var(--tomato); }
+	.chips button:hover { border-color: rgba(255,228,196,.3); }
+	input[type=range] { width: 100%; accent-color: var(--tomato); height: 22px; }
+	.btn { width: 100%; margin-top: 10px; border: 0; border-radius: 12px; padding: 12px 14px; font-weight: 700; letter-spacing: .01em; background: var(--text); color: #20150f; transition: transform .15s, filter .2s, opacity .2s; }
+	.btn:hover { filter: brightness(1.06); }
+	.btn:active { transform: scale(.98); }
+	.btn.fire { background: linear-gradient(135deg, #ffb347, var(--tomato) 55%, var(--tomato-2)); color: #fff; box-shadow: 0 10px 30px rgba(255, 90, 54, .35); }
+	.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+	.btn.ghost.on { border-color: var(--cheese); color: var(--cheese); }
+	body.busy #cut, body.busy #bake { opacity: .45; pointer-events: none; }
+	.tip { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); color: var(--muted); font-size: 12.5px; }
+	.tip b { color: var(--text); }
+	.chips .wide { grid-column: 1 / -1; }
+	.scan-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; font-size: 12px; font-weight: 600; }
+	.scan-head a { color: var(--muted); font-weight: 500; font-size: 12px; }
+	.scans { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+	.scans button { display: grid; justify-items: center; gap: 3px; padding: 5px 3px 6px; text-align: center; }
+	.scans img { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+	.scans span { font-size: 11.5px; line-height: 1.15; }
+	.chips button.loading { opacity: .6; pointer-events: none; }
+	#custom { display: none; margin-top: 4px; }
+	body.custom-mode #custom { display: block; }
+	.muted { color: var(--muted); font-weight: 500; font-size: 11.5px; }
+	.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 3px; border-radius: 11px; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
+	.seg button { border: 0; background: transparent; padding: 7px 4px; border-radius: 8px; font-weight: 600; font-size: 12px; color: var(--muted); }
+	.seg button.on { background: var(--text); color: #20150f; }
+	.starts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+	.starts button { display: grid; justify-items: center; gap: 5px; padding: 9px 4px 8px; border-radius: 11px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 650; font-size: 12px; line-height: 1.15; text-align: center; transition: border-color .2s, background .2s, transform .15s; }
+	.starts button:hover { border-color: rgba(255,228,196,.35); transform: translateY(-1px); }
+	.starts button.on { border-color: var(--cheese); background: rgba(255,211,110,.1); }
+	.sw { width: 40px; height: 40px; border-radius: 50%; box-shadow: 0 0 0 4px #d9a35e inset, 0 3px 10px rgba(0,0,0,.4); }
+	.sw.bare { background: radial-gradient(circle at 40% 35%, #f3dcb0, #e2bf86 70%); }
+	.sw.tom { background: radial-gradient(circle at 45% 40%, #c2432a, #9e2c16 62%, #e2bf86 63%); }
+	.sw.cla { background: radial-gradient(circle at 34% 38%, #fbf3e2 0 15%, transparent 16%), radial-gradient(circle at 64% 34%, #fbf3e2 0 12%, transparent 13%), radial-gradient(circle at 52% 66%, #fbf3e2 0 14%, transparent 15%), radial-gradient(circle at 45% 40%, #c2432a, #9e2c16 62%, #e2bf86 63%); }
+	.palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+	.palette button { display: grid; justify-items: center; gap: 2px; padding: 4px 2px 6px; border-radius: 11px; border: 1px solid var(--line); background: radial-gradient(circle at 50% 40%, rgba(255,236,214,.12), rgba(255,236,214,.03)); transition: border-color .2s, transform .15s, background .2s; }
+	.palette button:hover { transform: translateY(-1px); border-color: rgba(255,228,196,.35); }
+	.palette button.on { border-color: var(--cheese); background: radial-gradient(circle at 50% 40%, rgba(255,211,110,.28), rgba(255,211,110,.06)); box-shadow: 0 0 0 1px var(--cheese); }
+	.palette img { width: 56px; height: 56px; display: block; }
+	.palette span { font-size: 11.5px; font-weight: 600; line-height: 1.15; text-align: center; color: var(--text); }
+	.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+	.tools button { border: 1px solid var(--line); background: var(--panel-2); border-radius: 10px; padding: 8px; font-weight: 600; font-size: 12px; }
+	.tools button.on { border-color: var(--tomato); color: var(--tomato); }
+	body.placing #stage canvas { cursor: crosshair; }
+	hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0 6px; }
+
+	/* calculator */
+	.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+	.presets button { border: 1px solid var(--line); background: var(--panel-2); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+	.presets button:hover { color: var(--text); border-color: rgba(255,228,196,.3); }
+	.opt { display: grid; grid-template-columns: 28px 1fr; gap: 8px 10px; align-items: center; padding: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); margin-bottom: 8px; }
+	.opt .badge { grid-row: span 2; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 800; color: #20150f; }
+	.opt.A .badge { background: var(--cheese); }
+	.opt.B .badge { background: var(--basil); }
+	.opt .row { display: grid; grid-template-columns: 1fr 1fr .7fr; gap: 6px; }
+	.opt label { white-space: nowrap; }
+	.opt input, .settings select, .settings input { width: 100%; min-width: 0; background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font-variant-numeric: tabular-nums; }
+	.opt input:focus, .settings select:focus, .settings input:focus { outline: 2px solid var(--tomato); outline-offset: -1px; }
+	.opt label, .settings label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+	.opt label input, .settings label select, .settings label > input[type=number]:only-child { display: block; margin-top: 3px; }
+	.opt .name { font-weight: 700; font-size: 14px; background: transparent; border-color: transparent; padding-left: 0; }
+	.settings { display: grid; grid-template-columns: .9fr .9fr 1.5fr; gap: 8px; align-items: end; margin: 10px 0 4px; }
+	.check { display: flex !important; grid-template-columns: none; align-items: center; gap: 6px !important; }
+	.check input { width: auto; accent-color: var(--tomato); }
+	.verdict { margin: 14px 0 10px; padding: 12px 14px; border-radius: 12px; font-size: 15px; line-height: 1.35; }
+	.verdict.win-A { background: linear-gradient(135deg, rgba(255, 211, 110, .22), rgba(255, 211, 110, .06)); border: 1px solid rgba(255,211,110,.45); }
+	.verdict.win-B { background: linear-gradient(135deg, rgba(108, 195, 111, .22), rgba(108, 195, 111, .06)); border: 1px solid rgba(108,195,111,.45); }
+	.verdict.tie { background: var(--panel-2); }
+	.verdict .jump { display: inline-block; margin-left: 4px; font-size: 12.5px; font-weight: 600; color: var(--cheese); text-decoration: none; border-bottom: 1px dashed rgba(255,211,110,.5); }
+	.touch kbd { display: none; }
+	.crown { color: var(--cheese); font-size: 18px; }
+	.bar { margin: 8px 0; }
+	.bar-label { display: flex; justify-content: space-between; font-weight: 600; font-size: 12.5px; }
+	.bar-label span:last-child { font-variant-numeric: tabular-nums; color: var(--muted); }
+	.bar-track { height: 10px; border-radius: 99px; background: rgba(255,255,255,.07); overflow: hidden; margin: 4px 0; }
+	.bar-fill { height: 100%; border-radius: 99px; transition: width .5s cubic-bezier(.2,.8,.2,1); }
+	.bar-A .bar-fill { background: linear-gradient(90deg, #ffb347, var(--cheese)); }
+	.bar-B .bar-fill { background: linear-gradient(90deg, #3d9b4a, var(--basil)); }
+	.bar-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+	.bar-meta b { color: var(--text); }
+	.facts { margin: 12px 0 8px; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 13px; color: var(--muted); }
+	.facts li { padding-left: 16px; position: relative; }
+	.facts li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--tomato); }
+	.facts b { color: var(--text); font-variant-numeric: tabular-nums; }
+	.mini-wrap { margin: 10px 0 4px; }
+	.mini { width: 100%; height: auto; background: rgba(0,0,0,.18); border-radius: 12px; display: block; }
+	.mini-wrap figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+	.explain { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,.16); }
+	.explain summary { cursor: pointer; padding: 10px 12px; font-weight: 700; font-size: 13px; list-style: none; display: flex; justify-content: space-between; }
+	.explain summary::after { content: "−"; color: var(--muted); }
+	.explain:not([open]) summary::after { content: "+"; }
+	.steps { margin: 0; padding: 0 12px 10px; list-style: none; display: grid; gap: 12px; }
+	.steps h4 { margin: 0 0 4px; font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+	.steps h4 span { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--tomato); color: #fff; font-size: 11px; }
+	.steps p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+	.steps p b { color: var(--text); }
+	.steps .note { font-size: 12px; }
+	.eq { font: 500 12.5px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--cheese); background: rgba(255,211,110,.08); border: 1px solid rgba(255,211,110,.2); border-radius: 8px; padding: 6px 8px; overflow-x: auto; }
+	.mini-t { fill: var(--muted); font: 700 11px Inter, sans-serif; }
+
+	/* recipe */
+	.rc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+	.icon-btn { flex: none; width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--panel-2); display: grid; place-items: center; color: var(--text); }
+	.icon-btn svg { width: 18px; height: 18px; }
+	.icon-btn:hover { border-color: rgba(255,228,196,.35); }
+	.rc-note { margin: 0 0 12px; font-size: 12.5px; color: var(--muted); }
+	.rc-ctrl { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+	.rc-ctrl label { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+	.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; background: rgba(0,0,0,.25); }
+	.stepper button { width: 30px; height: 30px; border: 0; background: transparent; font-size: 16px; font-weight: 700; color: var(--text); }
+	.stepper output { min-width: 22px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.seg.two { grid-template-columns: 1fr 1fr; flex: 1; max-width: 220px; }
+	.rc-progress { position: relative; height: 26px; border-radius: 99px; background: rgba(255,255,255,.06); overflow: hidden; margin-bottom: 4px; --p: 0; }
+	.rc-progress i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--p)); background: linear-gradient(90deg, #3d9b4a, var(--basil)); transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+	.rc-count { position: relative; display: block; text-align: center; font: 600 12px/26px Inter, sans-serif; font-variant-numeric: tabular-nums; }
+	#recipe h3 { margin: 16px 0 6px; font: italic 600 18px/1.2 Fraunces, serif; }
+	#recipe h4 { margin: 10px 0 4px; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--cheese); }
+	.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+	.checks label { display: grid; grid-template-columns: 20px 1fr auto; align-items: start; gap: 9px; padding: 7px 8px; border-radius: 10px; cursor: pointer; transition: background .2s; }
+	.checks label:hover { background: var(--panel-2); }
+	.checks .it { font-size: 13px; line-height: 1.3; }
+	.checks .it small { display: block; color: var(--muted); font-size: 11.5px; }
+	.checks .q { font-size: 12.5px; color: var(--cheese); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	[data-tick] { position: absolute; opacity: 0; pointer-events: none; }
+	.ck, .rc-steps .num { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid rgba(255,228,196,.4); display: grid; place-items: center; transition: background .2s, border-color .2s; }
+	.ck::after { content: ""; width: 10px; height: 6px; border: solid #fff; border-width: 0 0 2px 2px; transform: rotate(-45deg) translate(1px, -1px) scale(0); transition: transform .2s; }
+	[data-tick]:checked + .ck { background: var(--basil); border-color: var(--basil); }
+	[data-tick]:checked + .ck::after { transform: rotate(-45deg) translate(1px, -1px) scale(1); }
+	[data-tick]:checked ~ .it, [data-tick]:checked ~ .q { opacity: .45; text-decoration: line-through; }
+	[data-tick]:focus-visible + .ck, [data-tick]:focus-visible + .num { outline: 2px solid var(--tomato); outline-offset: 2px; }
+	.rc-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+	.rc-steps .step { border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); transition: opacity .25s; }
+	.rc-steps .step > label { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; padding: 10px 12px 4px; cursor: pointer; }
+	.rc-steps .num { width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 800; color: var(--text); background: rgba(255,90,54,.18); border-color: rgba(255,90,54,.6); }
+	[data-tick]:checked + .num { background: var(--basil); border-color: var(--basil); color: transparent; position: relative; }
+	[data-tick]:checked + .num::after { content: "✓"; position: absolute; color: #fff; font-size: 13px; }
+	.rc-steps .st { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+	.rc-steps .st b { font-size: 13.5px; }
+	.rc-steps .time { flex: none; font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--cheese); padding: 1px 8px; border-radius: 99px; background: rgba(255,211,110,.1); border: 1px solid rgba(255,211,110,.25); }
+	.rc-steps .body { padding: 0 12px 11px 46px; font-size: 12.8px; color: var(--muted); line-height: 1.5; }
+	.rc-steps .body p { margin: 0; }
+	.rc-steps .body ul { margin: 2px 0 0; padding-left: 16px; display: grid; gap: 4px; }
+	.rc-steps .body b { color: var(--text); }
+	.rc-steps .warn { margin-top: 6px !important; padding: 6px 9px; border-radius: 8px; background: rgba(255,90,54,.12); color: #ffc2b2; }
+	.rc-steps .step:has([data-tick]:checked) { opacity: .55; }
+	.rc-steps .step:has([data-tick]:checked) .st b { text-decoration: line-through; }
+	.act-btn { margin-top: 8px; border: 1px solid rgba(255,90,54,.55); background: rgba(255,90,54,.12); color: var(--text); border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 700; }
+	.act-btn:hover { background: rgba(255,90,54,.22); }
+	.rc-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+	.rc-foot .btn { margin-top: 0; }
+	.rc-src { margin: 12px 0 0; font-size: 11.5px; color: var(--muted); }
+	.use-mine { width: 100%; margin: -4px 0 12px; border: 1px dashed rgba(255,211,110,.45); background: rgba(255,211,110,.06); color: var(--cheese); border-radius: 11px; padding: 8px 10px; font-weight: 650; font-size: 12.5px; }
+
+	/* the recipe prints as a clean card: title, then the shopping list beside the method, black on white */
+	@media print {
+		@page { margin: 16mm 14mm; }
+		html, body { height: auto; overflow: visible; background: #fff !important; color: #1d1611; font: 11pt/1.45 Inter, system-ui, sans-serif; }
+		#stage, #fade, #loader, header, .dtabs, #build, #calc, #bakehud, #toast, .hint, .rc-note, .rc-ctrl, .rc-progress, .rc-foot, #rcPrint, .act-btn { display: none !important; }
+		.panel { position: static; width: auto; max-height: none; background: none; border: 0; box-shadow: none; backdrop-filter: none; display: block; opacity: 1 !important; transform: none !important; }
+		.panes { overflow: visible; padding: 0; }
+		#recipe { display: grid !important; grid-template-columns: 0.9fr 1.3fr; column-gap: 12mm; animation: none; }
+		#recipe .rc-head, #recipe .rc-src { grid-column: 1 / -1; }
+		#recipe .rc-title { font: italic 700 28pt/1.1 Fraunces, serif; color: #1d1611; margin: 0; }
+		#recipe .rc-meta { color: #6b5a4c; font-size: 11pt; margin: 2pt 0 8mm; }
+		#recipe h3 { color: #b2321f; font-size: 15pt; margin: 0 0 3mm; grid-row: 2; }
+		#recipe h3:first-of-type { grid-column: 1; } #recipe h3:last-of-type { grid-column: 2; }
+		.rc-list { grid-column: 1; grid-row: 3; } .rc-steps { grid-column: 2; grid-row: 3; }
+		#recipe h4 { color: #6b5a4c; }
+		.checks label, .rc-steps .step > label { padding: 3pt 0; }
+		.checks .q { color: #1d1611; font-weight: 700; }
+		.rc-steps .body b, .rc-steps .st b, .checks .it { color: #1d1611; }
+		.checks .it small, .rc-steps .body, .rc-src { color: #5a4a3e; }
+		.ck, .rc-steps .num { border-color: #8a7a6c; color: #1d1611; background: none !important; }
+		.rc-steps .step { border: 0; border-bottom: 1px solid #e3d8cd; border-radius: 0; background: none; break-inside: avoid; opacity: 1 !important; }
+		.rc-steps .body { padding: 0 0 6pt 34px; }
+		.rc-steps .time { color: #1d1611; background: none; border-color: #c9b8a8; }
+		.rc-steps .warn { background: #fde9e4; color: #8a2a16; }
+		[data-tick]:checked ~ .it, [data-tick]:checked ~ .q, .rc-steps .step:has([data-tick]:checked) .st b { text-decoration: none; opacity: 1; }
+		.rc-src { margin-top: 8mm; font-size: 8.5pt; }
+	}
+
+	/* 3D tags */
+	.tag { display: grid; gap: 1px; padding: 8px 12px; border-radius: 12px; background: rgba(20, 13, 9, .78); border: 1px solid var(--line); backdrop-filter: blur(10px); text-align: center; font-size: 12px; color: var(--muted); white-space: nowrap; box-shadow: var(--shadow); }
+	.tag b { color: var(--text); font-size: 14px; }
+	.tag.win { border-color: var(--cheese); box-shadow: 0 0 0 1px var(--cheese), 0 0 40px rgba(255, 211, 110, .35); }
+	.tag .crown { font-size: 22px; line-height: 1; }
+	.tag-ring { padding: 4px 10px; color: var(--cheese); border-color: rgba(255,211,110,.5); }
+
+	/* bake HUD */
+	#bakehud { position: fixed; z-index: 30; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translate(-50%, 30px); opacity: 0; pointer-events: none; width: min(560px, calc(100% - 32px)); padding: 16px 18px; border-radius: 18px; background: rgba(20, 12, 8, .72); border: 1px solid rgba(255, 160, 80, .3); backdrop-filter: blur(16px); box-shadow: 0 20px 80px rgba(255, 90, 20, .25); transition: opacity .4s, transform .4s; }
+	#bakehud.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+	.bk-top { display: flex; align-items: baseline; gap: 18px; }
+	.bk-stat { display: grid; }
+	.bk-stat small { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+	.bk-stat span { font: 600 26px/1.1 Fraunces, serif; font-variant-numeric: tabular-nums; }
+	#bk-state { margin-left: auto; font: italic 600 22px Fraunces, serif; color: var(--cheese); }
+	.meter { position: relative; height: 12px; margin: 14px 0 6px; border-radius: 99px; background: linear-gradient(90deg, #efe1c2 0%, #e7c27e 35%, #c9822f 55%, #8a4a1b 70%, #3a1d0c 85%, #0d0705 100%); }
+	.meter .zone { position: absolute; left: 57.5%; width: 13%; top: -4px; bottom: -4px; border: 2px solid var(--basil); border-radius: 6px; }
+	#bk-needle { position: absolute; top: -7px; width: 4px; height: 26px; margin-left: -2px; border-radius: 3px; background: #fff; box-shadow: 0 0 12px #fff; left: 0; }
+	.meter-l { position: relative; display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+	.meter-l .perf { position: absolute; left: 64%; transform: translateX(-50%); color: var(--basil); font-weight: 600; }
+	#takeout { margin-top: 12px; }
+
+	#toast { position: fixed; z-index: 35; left: 50%; top: 84px; transform: translate(-50%, -12px); opacity: 0; pointer-events: none; padding: 12px 18px; border-radius: 14px; background: rgba(20,13,9,.82); border: 1px solid var(--line); backdrop-filter: blur(14px); box-shadow: var(--shadow); text-align: center; max-width: min(460px, calc(100% - 32px)); transition: opacity .35s, transform .35s; display: grid; gap: 2px; }
+	#toast.show { opacity: 1; transform: translate(-50%, 0); }
+	#toast b { font: italic 700 22px Fraunces, serif; color: var(--cheese); }
+	#toast span { color: var(--muted); }
+
+	kbd { font: 600 10.5px Inter, sans-serif; padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); }
+	.hint { position: fixed; z-index: 5; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 12.5px; color: rgba(247, 237, 225, .85); padding: 5px 12px; border-radius: 99px; background: rgba(20, 13, 9, .55); backdrop-filter: blur(8px); text-shadow: 0 1px 8px #000; white-space: nowrap; pointer-events: none; }
+	body.baking .hint { opacity: 0; }
+	.credits { position: relative; margin-left: auto; font-size: 12px; color: var(--muted); }
+	.credits + #mute { margin-left: 8px; }
+	.credits[open] div { position: absolute; right: 0; top: 46px; width: min(360px, calc(100vw - 32px)); z-index: 30; color: var(--muted); }
+	.credits a { color: var(--text); }
+	.credits summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; height: 40px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(14px); font-weight: 600; }
+	.credits summary::-webkit-details-marker { display: none; }
+	.credits[open] div { margin-top: 6px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(14px); text-align: left; line-height: 1.5; }
+	.credits a { color: inherit; }
+
+	@media (max-width: 1150px) and (min-width: 821px) { .hint { display: none; } .panel { width: 360px; } }
+	@media (max-width: 820px) {
+		header { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+		.credits { margin-left: auto; }
+		#mute { margin-left: 0; }
+		.brand { font-size: 22px; }
+		.brand small { display: none; }
+		.panel { left: 10px; right: 10px; width: auto; top: auto; bottom: max(10px, env(safe-area-inset-bottom)); max-height: 52vh; }
+		.panes { padding: 12px 14px 14px; }
+		.only-phone { display: flex !important; }
+		.dtabs button { font-size: 12px; padding: 8px 4px; gap: 5px; }
+		.dtabs button .n { display: none; }
+		body[data-panel="view"] .panes { display: none; }
+		body[data-panel="recipe"] .panel, body[data-panel="calc"] .panel { max-height: 70vh; }
+		.hint { display: none; }
+		.credits summary { padding: 0 10px; }
+		#toast { top: 64px; }
+		.credits[open] div { position: fixed; left: 12px; right: 12px; top: 60px; width: auto; }
+		#bakehud { bottom: 16px; }
+	}
+	@media (prefers-reduced-motion: reduce) { .spin g { animation-duration: 3.6s; } }
+</style>
+<script type="importmap">
+{ "imports": {
+	"three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+	"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body data-panel="build">
+<div id="stage"></div>
+<div id="fade"></div>
+
+<div id="loader" role="status" aria-live="polite">
+	<svg class="spin" viewBox="0 0 100 100" aria-hidden="true">
+		<!-- eight slices, slightly parted; a warm glow runs round them one slice at a time -->
+		<g style="animation-delay:-1.20s"><path class="cr" d="M50.84 47.97 L52.13 1.99 A46 46 0 0 1 82.45 14.55 Z"/><path class="ch" d="M50.84 47.97 L52.36 8.50 A39.5 39.5 0 0 1 77.68 18.99 Z"/><circle class="pp" cx="60.41" cy="24.87" r="5.2"/></g>
+		<g style="animation-delay:-1.05s"><path class="cr" d="M52.03 49.16 L85.45 17.55 A46 46 0 0 1 98.01 47.87 Z"/><path class="ch" d="M52.03 49.16 L81.01 22.32 A39.5 39.5 0 0 1 91.50 47.64 Z"/><circle class="pp" cx="75.13" cy="39.59" r="5.2"/></g>
+		<g style="animation-delay:-0.90s"><path class="cr" d="M52.03 50.84 L98.01 52.13 A46 46 0 0 1 85.45 82.45 Z"/><path class="ch" d="M52.03 50.84 L91.50 52.36 A39.5 39.5 0 0 1 81.01 77.68 Z"/><circle class="pp" cx="75.13" cy="60.41" r="5.2"/></g>
+		<g style="animation-delay:-0.75s"><path class="cr" d="M50.84 52.03 L82.45 85.45 A46 46 0 0 1 52.13 98.01 Z"/><path class="ch" d="M50.84 52.03 L77.68 81.01 A39.5 39.5 0 0 1 52.36 91.50 Z"/><circle class="pp" cx="60.41" cy="75.13" r="5.2"/></g>
+		<g style="animation-delay:-0.60s"><path class="cr" d="M49.16 52.03 L47.87 98.01 A46 46 0 0 1 17.55 85.45 Z"/><path class="ch" d="M49.16 52.03 L47.64 91.50 A39.5 39.5 0 0 1 22.32 81.01 Z"/><circle class="pp" cx="39.59" cy="75.13" r="5.2"/></g>
+		<g style="animation-delay:-0.45s"><path class="cr" d="M47.97 50.84 L14.55 82.45 A46 46 0 0 1 1.99 52.13 Z"/><path class="ch" d="M47.97 50.84 L18.99 77.68 A39.5 39.5 0 0 1 8.50 52.36 Z"/><circle class="pp" cx="24.87" cy="60.41" r="5.2"/></g>
+		<g style="animation-delay:-0.30s"><path class="cr" d="M47.97 49.16 L1.99 47.87 A46 46 0 0 1 14.55 17.55 Z"/><path class="ch" d="M47.97 49.16 L8.50 47.64 A39.5 39.5 0 0 1 18.99 22.32 Z"/><circle class="pp" cx="24.87" cy="39.59" r="5.2"/></g>
+		<g style="animation-delay:-0.15s"><path class="cr" d="M49.16 47.97 L17.55 14.55 A46 46 0 0 1 47.87 1.99 Z"/><path class="ch" d="M49.16 47.97 L22.32 18.99 A39.5 39.5 0 0 1 47.64 8.50 Z"/><circle class="pp" cx="39.59" cy="24.87" r="5.2"/></g>
+	</svg>
+	<h1>Pizza Lab</h1>
+	<p id="loadmsg">Preheating the oven</p>
+</div>
+
+<header>
+	<div class="brand">Pizza<em>Lab</em> <small>Slice · Bake · Compare</small></div>
+	<details class="credits"><summary aria-label="Credits">Credits</summary><div><b>All assets are Creative Commons or public domain.</b><br>Table wood, cutting-board wood, oven bricks &amp; lighting HDRI: <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a> (CC0)<br>Scanned pizzas: <a href="https://ambientcg.com/list?q=pizza" target="_blank" rel="noopener">ambientCG</a> Pizza001–004 (CC0)<br>Sounds: <a href="https://commons.wikimedia.org/wiki/File:Campfire_sound_ambience.ogg" target="_blank" rel="noopener">Glaneur de sons</a> (CC BY 3.0), pdsounds.org (PD), _stubb &amp; <a href="https://kenney.nl" target="_blank" rel="noopener">Kenney</a> (CC0)<br>Built with <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>. Dough, sauce and cheese textures are generated live in your browser.</div></details>
+	<button id="mute" aria-label="Sound" aria-pressed="true" title="Sound on/off">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path class="w" d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/><path class="x" d="m23 9-6 6M17 9l6 6"/></svg>
+	</button>
+</header>
+
+<aside id="dock" class="panel" aria-label="Pizza Lab">
+	<nav class="dtabs" role="tablist" aria-label="Sections">
+		<button id="tab-build" role="tab" data-panel="build" class="on"><span class="n">1</span>Make it</button>
+		<button id="tab-recipe" role="tab" data-panel="recipe"><span class="n">2</span>Recipe</button>
+		<button id="tab-calc" role="tab" data-panel="calc"><span class="n">3</span>Size &amp; price</button>
+		<button id="tab-view" role="tab" data-panel="view" class="only-phone">3D</button>
+	</nav>
+	<div class="panes">
+<section id="build" class="pane" role="tabpanel" aria-labelledby="tab-build">
+	<h2>Build your pie</h2>
+	<p class="sub">Real-time 3D. Orbit, zoom, slice and bake it.</p>
+	<div class="chips" id="types">
+		<button data-type="margherita"><i style="background:#3f8f2c"></i>Margherita</button>
+		<button data-type="pepperoni" class="on"><i style="background:#b2321f"></i>Pepperoni</button>
+		<button data-type="funghi"><i style="background:#b89a72"></i>Funghi</button>
+		<button data-type="diavola"><i style="background:#e0401f"></i>Diavola</button>
+		<div class="scan-head"><span>Real scans</span><a href="https://ambientcg.com/list?q=pizza" target="_blank" rel="noopener">ambientCG · CC0</a></div>
+		<div class="scans">
+			<button data-type="scan1"><img src="assets/scans/pizza001/thumb.jpg" alt=""><span>Tonno e cipolla</span></button>
+			<button data-type="scan2"><img src="assets/scans/pizza002/thumb.jpg" alt=""><span>Spinaci gratinata</span></button>
+			<button data-type="scan3"><img src="assets/scans/pizza003/thumb.jpg" alt=""><span>Ortolana</span></button>
+			<button data-type="scan4"><img src="assets/scans/pizza004/thumb.jpg" alt=""><span>Spinaci e ricotta</span></button>
+		</div>
+		<button data-type="custom" class="wide"><i style="background:conic-gradient(#ffd36e,#6cc36f,#ff5a36,#ffd36e)"></i>Create your own</button>
+	</div>
+	<section id="custom" aria-label="Pizza builder">
+		<div class="field"><span>Start from</span><small class="muted">then add toppings, or pour your own sauce</small></div>
+		<div class="starts" id="starts">
+			<button data-start="bare"><i class="sw bare" aria-hidden="true"></i>Bare dough</button>
+			<button data-start="tomato"><i class="sw tom" aria-hidden="true"></i>Tomato</button>
+			<button data-start="classic"><i class="sw cla" aria-hidden="true"></i>Tomato &amp; mozzarella</button>
+		</div>
+		<div class="field"><span>Cheese layer</span></div>
+		<div class="seg" id="base">
+			<button data-cheese="shred">Mozzarella</button>
+			<button data-cheese="fior">Fior di latte</button>
+			<button data-cheese="none" class="on">No cheese</button>
+		</div>
+		<div class="field"><span>Tomato sauce</span><small class="muted">hold to pour, drag to move the ladle</small></div>
+		<div class="tools">
+			<button data-kind="ladle">Pour</button>
+			<button data-kind="spread">Spread</button>
+			<button id="coat">Quick coat</button>
+			<button id="scrape">Scrape off</button>
+		</div>
+		<div class="field"><span>Ingredients</span><small class="muted">click or drag on the pizza</small></div>
+		<div id="palette" class="palette"></div>
+		<div class="tools">
+			<button id="eraser" data-kind="erase">Eraser</button>
+			<button id="undo">Undo</button>
+			<button id="clear">Clear all</button>
+		</div>
+		<p class="tip">While an ingredient is picked: <b>right-drag</b> (or two fingers) to orbit, scroll to zoom. Click it again to drop it. Cheese melts and bubbles when you bake.</p>
+	</section>
+	<div class="field"><label for="size">Size</label><output id="sizeOut">⌀ 33 cm</output></div>
+	<input id="size" type="range" min="22" max="50" value="33" aria-describedby="sizeOut">
+	<div class="field"><label for="slices">Slices</label><output id="slicesOut">8 slices</output></div>
+	<input id="slices" type="range" min="1" max="16" value="8" aria-describedby="slicesOut">
+	<button id="cut" class="btn">Cut into 8 slices</button>
+	<div class="field"><label for="done">Doneness</label><output id="doneOut">Perfetto</output></div>
+	<input id="done" type="range" min="0" max="160" value="100" aria-describedby="doneOut">
+	<button id="bake" class="btn fire">Bake it in the wood-fired oven</button>
+	<p class="tip">Tip: <b><span class="act">Click</span> a slice</b> to lift it and watch the mozzarella stretch. <span class="act">Click</span> again to put it back.</p>
+</section>
+
+<section id="recipe" class="pane" role="tabpanel" aria-labelledby="tab-recipe">
+	<div class="rc-head">
+		<div><h2 class="rc-title">Your pizza</h2><p class="sub rc-meta"></p></div>
+		<button id="rcPrint" class="icon-btn" title="Print the recipe" aria-label="Print the recipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg></button>
+	</div>
+	<p class="rc-note">Built from the pizza on the table: change its toppings, size, slices or doneness and this recipe follows.</p>
+	<div class="rc-ctrl">
+		<label>Pizzas<span class="stepper"><button data-step="-1" aria-label="One fewer">−</button><output id="rcN">1</output><button data-step="1" aria-label="One more">+</button></span></label>
+		<div class="seg two" id="rcOven" role="group" aria-label="Oven"><button data-oven="home" class="on">Home oven</button><button data-oven="wood">Wood-fired</button></div>
+	</div>
+	<div class="rc-progress"><i></i><span class="rc-count"></span></div>
+	<h3>Shopping list</h3>
+	<div class="rc-list"></div>
+	<h3>Method</h3>
+	<ol class="rc-steps"></ol>
+	<div class="rc-foot">
+		<button id="rcPrint2" class="btn">Print the recipe</button>
+		<button id="rcReset" class="btn ghost">Untick everything</button>
+	</div>
+	<p class="rc-src">Quantities: Neapolitan-style dough at 65% hydration and 2.8% salt (baker’s percentages), about 260 g per 33 cm pizza, scaled by area; toppings counted from what’s on the pizza.</p>
+</section>
+
+<section id="calc" class="pane" role="tabpanel" aria-labelledby="tab-calc">
+	<h2>Size showdown</h2>
+	<p class="sub">One familiar or two mediums? Area grows with the <b>square</b> of the diameter, so the menu can fool you.</p>
+	<button id="useMine" class="use-mine">Compare against the pizza on the table</button>
+	<div class="presets">
+		<button data-preset="familiar">1 Familiar vs 2 Medium</button>
+		<button data-preset="meme">18″ vs two 12″</button>
+		<button data-preset="large">Large vs 2 Small</button>
+		<button data-preset="party">XXL vs 3 Medium</button>
+	</div>
+	<div class="opt A">
+		<span class="badge">A</span>
+		<input id="aName" class="name" value="Familiar" aria-label="Option A name">
+		<div class="row">
+			<label>⌀ <span class="u">cm</span><input id="aD" type="number" inputmode="decimal" min="1" step="any" value="40"></label>
+			<label>Price <span class="c">€</span><input id="aP" type="number" inputmode="decimal" min="0" step="0.01" value="18"></label>
+			<label>Qty<input id="aQ" type="number" inputmode="numeric" min="1" max="12" value="1"></label>
+		</div>
+	</div>
+	<div class="opt B">
+		<span class="badge">B</span>
+		<input id="bName" class="name" value="Medium" aria-label="Option B name">
+		<div class="row">
+			<label>⌀ <span class="u">cm</span><input id="bD" type="number" inputmode="decimal" min="1" step="any" value="30"></label>
+			<label>Price each <span class="c">€</span><input id="bP" type="number" inputmode="decimal" min="0" step="0.01" value="12"></label>
+			<label>Qty<input id="bQ" type="number" inputmode="numeric" min="1" max="12" value="2"></label>
+		</div>
+	</div>
+	<div class="settings">
+		<label>Units<select id="unit"><option value="cm">cm</option><option value="in">inches</option></select></label>
+		<label>Currency<select id="cur"><option>€</option><option>$</option><option>£</option><option value="MX$">MX$</option><option>¥</option><option value="R$">R$</option><option value="CHF ">CHF</option></select></label>
+		<label class="check"><input id="crustOn" type="checkbox"> Ignore crust <input id="crustW" type="number" step="any" min="0" value="2.5" style="width:58px;padding:5px 6px" aria-label="Crust width"></label>
+	</div>
+	<div id="result" aria-live="polite"></div>
+	<button id="show3d" class="btn ghost">See it on the table in 3D</button>
+</section>
+	</div>
+</aside>
+
+<div id="bakehud" aria-live="polite">
+	<div class="bk-top">
+		<div class="bk-stat"><small>Oven</small><span id="bk-temp">470°C</span></div>
+		<div class="bk-stat"><small>Time</small><span id="bk-time">0:00</span></div>
+		<div id="bk-state">Raw dough</div>
+	</div>
+	<div class="meter"><div class="zone" title="Perfect window"></div><div id="bk-needle"></div></div>
+	<div class="meter-l"><span>Raw</span><span class="perf">Perfetto</span><span>Burnt</span></div>
+	<button id="takeout" class="btn fire">Take it out! <kbd>Space</kbd></button>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<div class="hint">Drag to orbit · Scroll to zoom · Click a slice to lift it · Keys: <kbd>C</kbd> cut · <kbd>B</kbd> bake · <kbd>Esc</kbd> drop</div>
+
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
